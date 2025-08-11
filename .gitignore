@@ -1,0 +1,46 @@
+# .gitignore for .NET, Blazor, and Node/npm projects
+
+# Build results
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# npm
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+
+# Publish output
+wwwroot/dist/
+
+# Others
+*.swp
+*.bak
+*.tmp
+
+# Rider
+.idea/
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Local history for VS Code
+.history/
