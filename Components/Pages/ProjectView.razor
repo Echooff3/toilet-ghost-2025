@@ -1,0 +1,1031 @@
+@page "/project/{ProjectId}"
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using ToiletGhost.Services
+@using ToiletGhost.Models
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITableStorageService TableStorageService
+@inject IBlobStorageService BlobStorageService
+@inject IFileValidationService FileValidationService
+@inject INotificationService NotificationService
+@inject IImageProcessingService ImageProcessingService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>@(project?.Name ?? "Project") - Toilet Ghost</PageTitle>
+
+@if (project != null)
+{
+    <div class="project-view">
+        <!-- Project Header -->
+        <div class="project-header margin-bottom-[2rem]">
+            <div class="display-[flex] align-items-[center] gap-[1rem] margin-bottom-[1rem]">
+                <h1 class="margin-[0] color-[#8b5a96] font-size-[2rem]">🎵 @project.Name</h1>
+                @if (isOwner)
+                {
+                    <button style="background-color: #8b5a96; color: #ffffff; border: none; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 0.9rem;"
+                            @onclick="ShowUploadModal"
+                            @onmouseover="@((args) => { })"
+                            @onmouseout="@((args) => { })">
+                        ⬆️ Upload Version
+                    </button>
+                    <button style="background-color: #6b4c7a; color: #ffffff; border: none; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 0.9rem;"
+                            @onclick="ShowRenameModal"
+                            @onmouseover="@((args) => { })"
+                            @onmouseout="@((args) => { })">
+                        ✏️ Rename
+                    </button>
+                    <button style="background-color: #9b6ba9; color: #ffffff; border: none; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 0.9rem;"
+                            @onclick="ShowArtworkModal"
+                            @onmouseover="@((args) => { })"
+                            @onmouseout="@((args) => { })">
+                        🎨 Artwork
+                    </button>
+                }
+            </div>
+            <div class="project-info color-[#cccccc] font-size-[0.9rem]">
+                Owner: @ownerNickname | Created: @project.CreatedAt.ToString("MMM dd, yyyy")
+            </div>
+        </div>
+
+        @if (latestVersion != null)
+        {
+            <!-- Audio Player -->
+            <div class="audio-player background-color-[#2d1b4e] border-radius-[8px] padding-[1.5rem] margin-bottom-[2rem] border-[2px_solid_#8b5a96]">
+                <div class="display-[flex] gap-[1rem] margin-bottom-[1rem]">
+                    @if (!string.IsNullOrEmpty(project.ArtworkBlobName))
+                    {
+                        <div class="artwork">
+                            <img src="@(artworkThumbnailUrl ?? artworkUrl)" alt="Artwork" 
+                                 style="width: 6.25rem; height: 6.25rem; object-fit: cover; border-radius: 8px; cursor: pointer;" 
+                                 @onclick="() => OpenImageInNewTab(artworkUrl ?? string.Empty)" />
+                        </div>
+                    }
+                    <div class="track-info flex-[1]">
+                        <div class="track-name font-size-[1.2rem] font-weight-[bold] margin-bottom-[0.5rem]">
+                            @project.Name - Version @latestVersion.VersionNumber
+                        </div>
+                        <div class="track-details color-[#cccccc] font-size-[0.9rem]">
+                            @FormatFileSize(latestVersion.FileSizeBytes) | @latestVersion.FileType.ToUpper()
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- WaveSurfer Container -->
+                <div id="waveform-@project.ProjectId" class="waveform-container height-[100px] margin-bottom-[1rem]"></div>
+                
+                <!-- Player Controls -->
+                <div class="player-controls display-[flex] gap-[1rem] align-items-[center]">
+                    <button id="play-btn-@project.ProjectId" class="btn-play background-color-[#8b5a96] color-[#ffffff] border-[none] padding-[0.5rem_1rem] border-radius-[4px] cursor-[pointer]">
+                        ▶️ Play
+                    </button>
+                    <div class="share-link display-[flex] gap-[0.5rem] align-items-[center]">
+                        <input type="text" readonly value="@shareableUrl" class="flex-[1] padding-[0.5rem] border-[1px_solid_#8b5a96] border-radius-[4px] background-color-[#1a0d2e] color-[#ffffff] font-size-[0.8rem]" />
+                        <button class="btn-copy background-color-[#666666] color-[#ffffff] border-[none] padding-[0.5rem] border-radius-[4px] cursor-[pointer]" 
+                                @onclick="CopyShareableUrl">
+                            📋
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- No Versions Available -->
+            <div class="no-versions background-color-[#2d1b4e] border-radius-[8px] padding-[3rem] text-align-[center] margin-bottom-[2rem] border-[2px_solid_#8b5a96]">
+                <div class="font-size-[3rem] margin-bottom-[1rem]">👻</div>
+                <h2 class="color-[#8b5a96] margin-bottom-[1rem]">No versions yet!</h2>
+                <p class="color-[#cccccc] margin-bottom-[2rem]">This project is waiting for its first musical haunting...</p>
+                @if (isOwner)
+                {
+                    <button class="btn-upload background-color-[#8b5a96] color-[#ffffff] border-[none] padding-[1rem_2rem] border-radius-[8px] cursor-[pointer] font-size-[1.1rem]" 
+                            @onclick="ShowUploadModal">
+                        ⬆️ Upload First Version
+                    </button>
+                }
+            </div>
+        }
+
+        <!-- Comments Section -->
+        <div class="comments-section">
+            <h3 class="color-[#8b5a96] margin-bottom-[1rem] display-[flex] align-items-[center] gap-[0.5rem]">
+                💬 Comments (@comments.Count)
+            </h3>
+            
+            <!-- Add Comment Controls -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem;">
+                <button style="background-color: #8b5a96; color: #ffffff; border: 2px solid #ffffff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease;" 
+                        onmouseover="this.style.backgroundColor='#a568b3'; this.style.transform='translateY(-1px)'"
+                        onmouseout="this.style.backgroundColor='#8b5a96'; this.style.transform='translateY(0)'"
+                        @onclick="() => ShowCommentModal(CommentType.Text)">
+                    💬 Add Comment
+                </button>
+                <button style="background-color: #8b5a96; color: #ffffff; border: 2px solid #ffffff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease;" 
+                        onmouseover="this.style.backgroundColor='#a568b3'; this.style.transform='translateY(-1px)'"
+                        onmouseout="this.style.backgroundColor='#8b5a96'; this.style.transform='translateY(0)'"
+                        @onclick="() => ShowCommentModal(CommentType.Image)">
+                    🖼️ Add Image
+                </button>
+                <button style="background-color: #8b5a96; color: #ffffff; border: 2px solid #ffffff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease;" 
+                        onmouseover="this.style.backgroundColor='#a568b3'; this.style.transform='translateY(-1px)'"
+                        onmouseout="this.style.backgroundColor='#8b5a96'; this.style.transform='translateY(0)'"
+                        @onclick="() => ShowCommentModal(CommentType.Link)">
+                    🔗 Add Link
+                </button>
+            </div>
+
+            <!-- Comments List -->
+            <div class="comments-list">
+                @foreach (var comment in comments)
+                {
+                    <div class="comment background-color-[#2d1b4e] border-radius-[8px] padding-[1rem] margin-bottom-[1rem] border-[1px_solid_#8b5a96]">
+                        <div class="comment-header display-[flex] justify-content-[space-between] align-items-[center] margin-bottom-[0.5rem]">
+                            <div class="comment-author font-weight-[bold] color-[#8b5a96]">@comment.Nickname</div>
+                            <div class="comment-date color-[#cccccc] font-size-[0.8rem]">@comment.CreatedAt.ToString("MMM dd, yyyy HH:mm")</div>
+                        </div>
+                        <div class="comment-content">
+                            @if (comment.Type == CommentType.Text)
+                            {
+                                <p class="margin-[0]">@comment.CommentData</p>
+                            }
+                            else if (comment.Type == CommentType.Image)
+                            {
+                                var displayUrl = commentThumbnailUrls.GetValueOrDefault(comment.RowKey, comment.CommentData);
+                                <img src="@displayUrl" alt="Comment image" 
+                                     style="width: 12.5rem; height: 12.5rem; object-fit: cover; border-radius: 8px; cursor: pointer;" 
+                                     @onclick="() => OpenImageInNewTab(comment.CommentData)" />
+                            }
+                            else if (comment.Type == CommentType.Link)
+                            {
+                                <a href="#" @onclick="() => ConfirmLinkNavigation(comment.CommentData)" @onclick:preventDefault="true" 
+                                   class="color-[#8b5a96] text-decoration-[underline] cursor-[pointer]">
+                                    🔗 @comment.CommentData
+                                </a>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (!comments.Any())
+                {
+                    <div class="no-comments text-align-[center] color-[#cccccc] padding-[2rem] font-style-[italic]">
+                        No comments yet. Be the first to haunt this project! 👻
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="loading text-align-[center] padding-[3rem]">
+        <div class="font-size-[3rem] margin-bottom-[1rem]">👻</div>
+        <div class="color-[#cccccc]">Loading project...</div>
+    </div>
+}
+
+<!-- Upload Modal -->
+@if (showUploadModal)
+{
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;" @onclick="HideUploadModal">
+        <div style="background-color: #2d1b4e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; color: #ffffff; border: 2px solid #8b5a96; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);" @onclick:stopPropagation="true">
+            <h3 style="margin-top: 0; color: #8b5a96; font-size: 1.5rem; text-align: center; margin-bottom: 1.5rem;">⬆️ Upload New Version</h3>
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ffffff;">Audio File (Max 75MB):</label>
+                <InputFile OnChange="OnFileSelected" accept="audio/*" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 6px; background-color: #1a0d2e; color: #ffffff; font-size: 1rem; box-sizing: border-box;" />
+                @if (!string.IsNullOrEmpty(uploadError))
+                {
+                    <div style="color: #ff6b6b; font-size: 0.9rem; margin-top: 0.5rem; padding: 0.5rem; background-color: rgba(255, 107, 107, 0.1); border-radius: 4px; border: 1px solid #ff6b6b;">@uploadError</div>
+                }
+            </div>
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button style="background-color: #666666; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                        onmouseover="this.style.backgroundColor='#777777'"
+                        onmouseout="this.style.backgroundColor='#666666'"
+                        @onclick="HideUploadModal">
+                    Cancel
+                </button>
+                <button style="background-color: #8b5a96; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem; opacity: @(selectedFile == null || isUploading ? "0.6" : "1"); cursor: @(selectedFile == null || isUploading ? "not-allowed" : "pointer");" 
+                        onmouseover="if (!this.disabled) this.style.backgroundColor='#a568b3'"
+                        onmouseout="if (!this.disabled) this.style.backgroundColor='#8b5a96'"
+                        @onclick="UploadFile" disabled="@(selectedFile == null || isUploading)">
+                    @if (isUploading)
+                    {
+                        <span>⏳ Uploading...</span>
+                    }
+                    else
+                    {
+                        <span>⬆️ Upload</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Comment Modal -->
+@if (showCommentModal)
+{
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;" @onclick="HideCommentModal">
+        <div style="background-color: #2d1b4e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; color: #ffffff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); border: 2px solid #8b5a96;" @onclick:stopPropagation="true">
+            <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: #8b5a96; font-size: 1.3em; text-align: center;">
+                @(commentType switch
+                {
+                    CommentType.Text => "💬 Add Comment",
+                    CommentType.Image => "🖼️ Add Image",
+                    CommentType.Link => "🔗 Add Link",
+                    _ => "Add Comment"
+                })
+            </h3>
+            
+            @if (commentType == CommentType.Text)
+            {
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">Comment:</label>
+                    <textarea @bind="commentText" rows="4" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 8px; background-color: #1a0d2e; color: #ffffff; resize: vertical; font-family: inherit; font-size: 1rem; box-sizing: border-box;" placeholder="Share your thoughts..."></textarea>
+                </div>
+            }
+            else if (commentType == CommentType.Image)
+            {
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">Image (Max 15MB):</label>
+                    <InputFile OnChange="OnCommentImageSelected" accept="image/*" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 8px; background-color: #1a0d2e; color: #ffffff; font-family: inherit; font-size: 1rem; box-sizing: border-box;" />
+                </div>
+            }
+            else if (commentType == CommentType.Link)
+            {
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">URL:</label>
+                    <input type="url" @bind="commentText" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 8px; background-color: #1a0d2e; color: #ffffff; font-family: inherit; font-size: 1rem; box-sizing: border-box;" placeholder="https://..." />
+                </div>
+            }
+            
+            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                <button style="background-color: #666666; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                        @onclick="HideCommentModal"
+                        @onmouseover="@((args) => { })"
+                        @onmouseout="@((args) => { })">
+                    Cancel
+                </button>
+                <button style="@($"background-color: {(isAddingComment || !IsCommentValid() ? "#555" : "#8b5a96")}; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: {(isAddingComment || !IsCommentValid() ? "not-allowed" : "pointer")}; font-weight: bold; transition: all 0.2s ease; font-size: 1rem; opacity: {(isAddingComment || !IsCommentValid() ? "0.6" : "1")};")"
+                        @onclick="AddComment" disabled="@(isAddingComment || !IsCommentValid())"
+                        @onmouseover="@((args) => { })"
+                        @onmouseout="@((args) => { })">
+                    @if (isAddingComment)
+                    {
+                        <span>⏳ Adding...</span>
+                    }
+                    else
+                    {
+                        <span>✨ Add</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Rename Project Modal -->
+@if (showRenameModal)
+{
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;" @onclick="HideRenameModal">
+        <div style="background-color: #2d1b4e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; color: #ffffff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); border: 2px solid #8b5a96;" @onclick:stopPropagation="true">
+            <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: #8b5a96; font-size: 1.3em; text-align: center;">
+                ✏️ Rename Project
+            </h3>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">Project Name:</label>
+                <input type="text" @bind="newProjectName" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 8px; background-color: #1a0d2e; color: #ffffff; font-family: inherit; font-size: 1rem; box-sizing: border-box;" placeholder="Enter new project name..." />
+            </div>
+            
+            @if (!string.IsNullOrEmpty(renameError))
+            {
+                <div style="background-color: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; color: #dc3545; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+                    ⚠️ @renameError
+                </div>
+            }
+            
+            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                <button style="background-color: #666666; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                        @onclick="HideRenameModal"
+                        @onmouseover="@((args) => { })"
+                        @onmouseout="@((args) => { })">
+                    Cancel
+                </button>
+                <button style="@($"background-color: {(isRenaming || string.IsNullOrWhiteSpace(newProjectName) ? "#555" : "#8b5a96")}; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: {(isRenaming || string.IsNullOrWhiteSpace(newProjectName) ? "not-allowed" : "pointer")}; font-weight: bold; transition: all 0.2s ease; font-size: 1rem; opacity: {(isRenaming || string.IsNullOrWhiteSpace(newProjectName) ? "0.6" : "1")};")"
+                        @onclick="RenameProject" disabled="@(isRenaming || string.IsNullOrWhiteSpace(newProjectName))"
+                        @onmouseover="@((args) => { })"
+                        @onmouseout="@((args) => { })">
+                    @if (isRenaming)
+                    {
+                        <span>⏳ Renaming...</span>
+                    }
+                    else
+                    {
+                        <span>✨ Rename</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Artwork Upload Modal -->
+@if (showArtworkModal)
+{
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;" @onclick="HideArtworkModal">
+        <div style="background-color: #2d1b4e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; color: #ffffff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); border: 2px solid #8b5a96;" @onclick:stopPropagation="true">
+            <h3 style="margin-top: 0; margin-bottom: 1.5rem; color: #8b5a96; font-size: 1.3em; text-align: center;">
+                🎨 Upload Artwork
+            </h3>
+            
+            @if (!string.IsNullOrEmpty(project?.ArtworkBlobName))
+            {
+                <div style="margin-bottom: 1.5rem; text-align: center;">
+                    <div style="margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">Current Artwork:</div>
+                    <img src="@artworkUrl" alt="Current artwork" style="max-width: 150px; max-height: 150px; border-radius: 8px; border: 2px solid #8b5a96;" />
+                </div>
+            }
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ddd;">New Artwork (Max 15MB, JPG/PNG):</label>
+                <InputFile OnChange="OnArtworkSelected" accept="image/*" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 8px; background-color: #1a0d2e; color: #ffffff; font-family: inherit; font-size: 1rem; box-sizing: border-box;" />
+            </div>
+            
+            @if (!string.IsNullOrEmpty(artworkError))
+            {
+                <div style="background-color: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; color: #dc3545; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem;">
+                    ⚠️ @artworkError
+                </div>
+            }
+            
+            <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                <button style="background-color: #666666; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                        @onclick="HideArtworkModal"
+                        @onmouseover="@((args) => { })"
+                        @onmouseout="@((args) => { })">
+                    Cancel
+                </button>
+                @if (!string.IsNullOrEmpty(project?.ArtworkBlobName))
+                {
+                    <button style="background-color: #dc3545; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;"
+                            @onclick="RemoveArtwork" disabled="@isUploadingArtwork"
+                            @onmouseover="@((args) => { })"
+                            @onmouseout="@((args) => { })">
+                        🗑️ Remove
+                    </button>
+                }
+                <button style="@($"background-color: {(isUploadingArtwork || selectedArtwork == null ? "#555" : "#8b5a96")}; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: {(isUploadingArtwork || selectedArtwork == null ? "not-allowed" : "pointer")}; font-weight: bold; transition: all 0.2s ease; font-size: 1rem; opacity: {(isUploadingArtwork || selectedArtwork == null ? "0.6" : "1")};")"
+                        @onclick="UploadArtwork" disabled="@(isUploadingArtwork || selectedArtwork == null)"
+                        @onmouseover="@((args) => { })"
+                        @onmouseout="@((args) => { })">
+                    @if (isUploadingArtwork)
+                    {
+                        <span>⏳ Uploading...</span>
+                    }
+                    else
+                    {
+                        <span>🎨 Upload</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string ProjectId { get; set; } = "";
+    
+    private Project? project;
+    private ProjectVersion? latestVersion;
+    private List<Comment> comments = new();
+    private Dictionary<string, string> commentThumbnailUrls = new(); // Maps comment RowKey to thumbnail URL
+    private User? currentUser;
+    private string? ownerNickname;
+    private bool isOwner = false;
+    private string? artworkUrl;
+    private string? artworkThumbnailUrl;
+    private string? shareableUrl;
+    private string? previousProjectId;
+
+    // Flag to track when arb.js needs to be called after render
+    private bool needsArbCall = false;
+    
+    // Upload modal state
+    private bool showUploadModal = false;
+    private IBrowserFile? selectedFile;
+    private bool isUploading = false;
+    private string uploadError = "";
+    
+    // Comment modal state
+    private bool showCommentModal = false;
+    private CommentType commentType = CommentType.Text;
+    private string commentText = "";
+    private IBrowserFile? selectedCommentImage;
+    private bool isAddingComment = false;
+
+    // Rename modal state
+    private bool showRenameModal = false;
+    private string newProjectName = "";
+    private bool isRenaming = false;
+    private string renameError = "";
+
+    // Artwork modal state
+    private bool showArtworkModal = false;
+    private IBrowserFile? selectedArtwork;
+    private bool isUploadingArtwork = false;
+    private string artworkError = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjectData();
+        await SetupSignalRConnection();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // This is called when route parameters change (like ProjectId)
+        // It ensures the component reloads data when navigating between projects
+        Console.WriteLine($"ProjectView: OnParametersSetAsync called with ProjectId: {ProjectId}");
+        await LoadProjectData();
+        await SetupSignalRConnection();
+
+        // Note: arb.js will be called in OnAfterRenderAsync to avoid prerendering issues
+    }
+
+    private async Task SetupSignalRConnection()
+    {
+        try
+        {
+            if (project != null)
+            {
+                // Leave previous project group if we were in one
+                if (!string.IsNullOrEmpty(previousProjectId) && previousProjectId != project.ProjectId)
+                {
+                    await JSRuntime.InvokeVoidAsync("leaveProjectGroup", previousProjectId);
+                }
+                
+                // Join new project group
+                await JSRuntime.InvokeVoidAsync("setupProjectSignalR", project.ProjectId, DotNetObjectReference.Create(this));
+                
+                // Store current project ID for cleanup
+                previousProjectId = project.ProjectId;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to setup SignalR: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnProjectUpdated(object projectData)
+    {
+        Console.WriteLine("Project updated via SignalR");
+        await LoadProjectData();
+        await InvokeAsync(StateHasChanged);
+        
+        // Schedule arb.js to be called after render
+        needsArbCall = true;
+    }
+
+    [JSInvokable]
+    public async Task OnCommentAdded(object commentData)
+    {
+        Console.WriteLine("Comment added via SignalR");
+        await LoadProjectData();
+        await InvokeAsync(StateHasChanged);
+        
+        // Schedule arb.js to be called after render
+        needsArbCall = true;
+    }
+
+    [JSInvokable]
+    public async Task OnVersionAdded(object versionData)
+    {
+        Console.WriteLine("Version added via SignalR");
+        await LoadProjectData();
+        await InvokeAsync(StateHasChanged);
+        
+        // Schedule arb.js to be called after render
+        needsArbCall = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (latestVersion != null)
+            {
+                await InitializeAudioPlayer();
+            }
+        }
+        
+        // Run arb.js whenever needed (first render or after state changes)
+        if (firstRender || needsArbCall)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval", "if (window.__arb) window.__arb();");
+                needsArbCall = false; // Reset the flag
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to call arb.js: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task LoadProjectData()
+    {
+        Console.WriteLine($"ProjectView: LoadProjectData called for ProjectId: {ProjectId}");
+        try
+        {
+            // Get current user
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                var email = authState.User.FindFirst(ClaimTypes.Email)?.Value ?? 
+                           authState.User.FindFirst("preferred_username")?.Value ?? "";
+                
+                if (!string.IsNullOrEmpty(email))
+                {
+                    currentUser = await TableStorageService.GetUserAsync(email);
+                }
+            }
+
+            // Load project
+            project = await TableStorageService.GetProjectAsync(ProjectId);
+            Console.WriteLine($"ProjectView: Loaded project: {project?.Name ?? "null"}");
+            if (project == null) return;
+
+            // Check if current user is owner
+            isOwner = currentUser?.Email == project.OwnerEmail;
+
+            // Load owner info
+            var owner = await TableStorageService.GetUserAsync(project.OwnerEmail);
+            ownerNickname = owner?.Nickname ?? "Unknown Ghost";
+
+            // Load latest version
+            latestVersion = await TableStorageService.GetLatestVersionAsync(ProjectId);
+            
+            if (latestVersion != null)
+            {
+                // Get shareable URL
+                shareableUrl = (await BlobStorageService.GetFileUrlAsync(latestVersion.FileName, TimeSpan.FromHours(24))).ToString();
+            }
+
+            // Load artwork if available
+            if (!string.IsNullOrEmpty(project.ArtworkBlobName))
+            {
+                artworkUrl = (await BlobStorageService.GetFileUrlAsync(project.ArtworkBlobName, TimeSpan.FromHours(24))).ToString();
+                
+                // Load artwork thumbnail if available
+                if (!string.IsNullOrEmpty(project.ArtworkThumbnailBlobName))
+                {
+                    artworkThumbnailUrl = (await BlobStorageService.GetFileUrlAsync(project.ArtworkThumbnailBlobName, TimeSpan.FromHours(24))).ToString();
+                }
+                
+                Console.WriteLine($"ProjectView: Loaded artwork URL");
+            }
+
+            // Load comments
+            comments = (await TableStorageService.GetProjectCommentsAsync(ProjectId)).ToList();
+            Console.WriteLine($"ProjectView: Loaded {comments?.Count ?? 0} comments");
+
+            // Load comment thumbnail URLs for image comments
+            commentThumbnailUrls.Clear();
+            if (comments != null)
+            {
+                foreach (var comment in comments.Where(c => c.Type == CommentType.Image && !string.IsNullOrEmpty(c.ThumbnailBlobName)))
+                {
+                    try
+                    {
+                        var thumbnailUrl = (await BlobStorageService.GetFileUrlAsync(comment.ThumbnailBlobName!, TimeSpan.FromHours(24))).ToString();
+                        commentThumbnailUrls[comment.RowKey] = thumbnailUrl;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to load thumbnail for comment {comment.RowKey}: {ex.Message}");
+                    }
+                }
+            }
+
+            // Trigger UI refresh
+            StateHasChanged();
+            Console.WriteLine("ProjectView: StateHasChanged called");
+
+            // Schedule arb.js to be called after render
+            needsArbCall = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading project data: {ex.Message}");
+        }
+    }
+
+    private async Task InitializeAudioPlayer()
+    {
+        if (latestVersion != null)
+        {
+            await JSRuntime.InvokeVoidAsync("initializeWaveSurfer", project!.ProjectId, shareableUrl);
+        }
+    }
+
+    private void ShowUploadModal()
+    {
+        uploadError = "";
+        selectedFile = null;
+        showUploadModal = true;
+    }
+
+    private void HideUploadModal()
+    {
+        showUploadModal = false;
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        uploadError = "";
+
+        if (selectedFile != null)
+        {
+            if (!FileValidationService.IsValidAudioFile(selectedFile.Name, selectedFile.Size))
+            {
+                uploadError = "Invalid audio file. Please select a valid audio file under 75MB.";
+                selectedFile = null;
+            }
+        }
+    }
+
+    private async Task UploadFile()
+    {
+        if (selectedFile == null || project == null || currentUser == null) return;
+
+        isUploading = true;
+        try
+        {
+            using var stream = selectedFile.OpenReadStream(75 * 1024 * 1024); // 75MB max
+            var contentType = FileValidationService.GetContentType(selectedFile.Name);
+            var versionNumber = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            
+            var fileName = await BlobStorageService.UploadFileAsync(
+                stream, selectedFile.Name, contentType, 
+                currentUser.Email, project.Name, versionNumber);
+
+            var version = new ProjectVersion(project.ProjectId, fileName, selectedFile.Size, 
+                Path.GetExtension(selectedFile.Name).TrimStart('.'));
+            
+            await TableStorageService.CreateVersionAsync(version);
+
+            // Send real-time notification for version
+            await NotificationService.NotifyVersionAdded(version);
+
+            // Update project timestamp
+            project.UpdatedAt = DateTime.UtcNow;
+            await TableStorageService.UpdateProjectAsync(project);
+
+            // Send real-time notification for project update
+            await NotificationService.NotifyProjectUpdated(project);
+
+            showUploadModal = false;
+            await LoadProjectData();
+            StateHasChanged();
+            
+            // Schedule arb.js to be called after render
+            needsArbCall = true;
+        }
+        catch (Exception ex)
+        {
+            uploadError = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private void ShowCommentModal(CommentType type)
+    {
+        commentType = type;
+        commentText = "";
+        selectedCommentImage = null;
+        showCommentModal = true;
+    }
+
+    private void HideCommentModal()
+    {
+        showCommentModal = false;
+    }
+
+    private void OnCommentImageSelected(InputFileChangeEventArgs e)
+    {
+        selectedCommentImage = e.File;
+    }
+
+    private bool IsCommentValid()
+    {
+        return commentType switch
+        {
+            CommentType.Text => !string.IsNullOrWhiteSpace(commentText),
+            CommentType.Link => !string.IsNullOrWhiteSpace(commentText) && Uri.IsWellFormedUriString(commentText, UriKind.Absolute),
+            CommentType.Image => selectedCommentImage != null,
+            _ => false
+        };
+    }
+
+    private async Task AddComment()
+    {
+        if (!IsCommentValid() || currentUser == null || project == null) return;
+
+        isAddingComment = true;
+        try
+        {
+            string commentData = "";
+            string? thumbnailBlobName = null;
+
+            if (commentType == CommentType.Image && selectedCommentImage != null)
+            {
+                if (!FileValidationService.IsValidImageFile(selectedCommentImage.Name, selectedCommentImage.Size))
+                {
+                    Console.WriteLine($"Image validation failed for: {selectedCommentImage.Name}, Size: {selectedCommentImage.Size} bytes");
+                    return;
+                }
+
+                using var stream = selectedCommentImage.OpenReadStream(15 * 1024 * 1024); // 15MB max
+                var contentType = FileValidationService.GetContentType(selectedCommentImage.Name);
+                var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                
+                // Process image to create thumbnail
+                var (originalBytes, thumbnailBytes) = await ImageProcessingService.ProcessImageAsync(stream, contentType);
+                
+                // Upload both original and thumbnail
+                var (originalBlobName, thumbBlobName) = await BlobStorageService.UploadImageWithThumbnailAsync(
+                    originalBytes, thumbnailBytes, selectedCommentImage.Name, contentType,
+                    currentUser.Email, project.Name, timestamp);
+                
+                // Get URLs
+                commentData = (await BlobStorageService.GetFileUrlAsync(originalBlobName, TimeSpan.FromHours(24))).ToString();
+                thumbnailBlobName = thumbBlobName;
+            }
+            else
+            {
+                commentData = commentText.Trim();
+            }
+
+            var comment = new Comment(project.ProjectId, currentUser.Nickname, commentType, commentData);
+            comment.ThumbnailBlobName = thumbnailBlobName;
+            await TableStorageService.CreateCommentAsync(comment);
+
+            // Send real-time notification
+            await NotificationService.NotifyCommentAdded(comment);
+
+            showCommentModal = false;
+            await LoadProjectData();
+            StateHasChanged();
+            
+            // Schedule arb.js to be called after render
+            needsArbCall = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding comment: {ex.Message}");
+        }
+        finally
+        {
+            isAddingComment = false;
+        }
+    }
+
+    private async Task CopyShareableUrl()
+    {
+        if (!string.IsNullOrEmpty(shareableUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", shareableUrl);
+        }
+    }
+
+    private async Task ConfirmLinkNavigation(string url)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to navigate to: {url}?");
+        if (confirmed)
+        {
+            await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+        }
+    }
+
+    private async Task OpenImageInNewTab(string imageUrl)
+    {
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("open", imageUrl, "_blank");
+        }
+    }
+
+    // Rename Project Methods
+    private void ShowRenameModal()
+    {
+        newProjectName = project?.Name ?? "";
+        renameError = "";
+        showRenameModal = true;
+    }
+
+    private void HideRenameModal()
+    {
+        showRenameModal = false;
+        newProjectName = "";
+        renameError = "";
+    }
+
+    private async Task RenameProject()
+    {
+        if (string.IsNullOrWhiteSpace(newProjectName) || project == null || currentUser == null) return;
+
+        isRenaming = true;
+        renameError = "";
+        try
+        {
+            var trimmedName = newProjectName.Trim();
+            if (trimmedName.Length < 3)
+            {
+                renameError = "Project name must be at least 3 characters long.";
+                return;
+            }
+
+            if (trimmedName.Length > 50)
+            {
+                renameError = "Project name must be 50 characters or less.";
+                return;
+            }
+
+            project.Name = trimmedName;
+            project.UpdatedAt = DateTime.UtcNow;
+            await TableStorageService.UpdateProjectAsync(project);
+
+            // Send real-time notification
+            await NotificationService.NotifyProjectUpdated(project);
+
+            showRenameModal = false;
+            StateHasChanged();
+            
+            // Schedule arb.js to be called after render
+            needsArbCall = true;
+        }
+        catch (Exception ex)
+        {
+            renameError = $"Failed to rename project: {ex.Message}";
+        }
+        finally
+        {
+            isRenaming = false;
+        }
+    }
+
+    // Artwork Upload Methods
+    private void ShowArtworkModal()
+    {
+        selectedArtwork = null;
+        artworkError = "";
+        showArtworkModal = true;
+    }
+
+    private void HideArtworkModal()
+    {
+        showArtworkModal = false;
+        selectedArtwork = null;
+        artworkError = "";
+    }
+
+    private void OnArtworkSelected(InputFileChangeEventArgs e)
+    {
+        selectedArtwork = e.File;
+        artworkError = "";
+    }
+
+    private async Task UploadArtwork()
+    {
+        if (selectedArtwork == null || project == null || currentUser == null) return;
+
+        isUploadingArtwork = true;
+        artworkError = "";
+        try
+        {
+            // Validate file
+            if (!FileValidationService.IsValidImageFile(selectedArtwork.Name, selectedArtwork.Size))
+            {
+                artworkError = "Please select a valid image file (JPG, PNG) under 15MB.";
+                return;
+            }
+
+            if (selectedArtwork.Size > 15 * 1024 * 1024) // 15MB
+            {
+                artworkError = "Image file must be 15MB or smaller.";
+                return;
+            }
+
+            // Delete old artwork and thumbnail if exists
+            if (!string.IsNullOrEmpty(project.ArtworkBlobName))
+            {
+                await BlobStorageService.DeleteFileAsync(project.ArtworkBlobName);
+            }
+            if (!string.IsNullOrEmpty(project.ArtworkThumbnailBlobName))
+            {
+                await BlobStorageService.DeleteFileAsync(project.ArtworkThumbnailBlobName);
+            }
+
+            // Process and upload new artwork with thumbnail
+            using var originalStream = selectedArtwork.OpenReadStream(15 * 1024 * 1024);
+            var processedImage = await ImageProcessingService.ProcessImageAsync(originalStream, selectedArtwork.Name);
+            
+            var contentType = FileValidationService.GetContentType(selectedArtwork.Name);
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            
+            var (originalBlobName, thumbnailBlobName) = await BlobStorageService.UploadImageWithThumbnailAsync(
+                processedImage.originalBytes, processedImage.thumbnailBytes, 
+                selectedArtwork.Name, contentType, currentUser.Email, project.Name, timestamp);
+
+            // Update project with new artwork
+            project.ArtworkBlobName = originalBlobName;
+            project.ArtworkThumbnailBlobName = thumbnailBlobName;
+            project.UpdatedAt = DateTime.UtcNow;
+            await TableStorageService.UpdateProjectAsync(project);
+
+            // Send real-time notification
+            await NotificationService.NotifyProjectUpdated(project);
+
+            // Refresh artwork URL
+            await LoadProjectData();
+            
+            showArtworkModal = false;
+            StateHasChanged();
+            
+            // Schedule arb.js to be called after render
+            needsArbCall = true;
+        }
+        catch (Exception ex)
+        {
+            artworkError = $"Failed to upload artwork: {ex.Message}";
+        }
+        finally
+        {
+            isUploadingArtwork = false;
+        }
+    }
+
+    private async Task RemoveArtwork()
+    {
+        if (project == null || string.IsNullOrEmpty(project.ArtworkBlobName)) return;
+
+        isUploadingArtwork = true;
+        artworkError = "";
+        try
+        {
+            // Delete the artwork files
+            await BlobStorageService.DeleteFileAsync(project.ArtworkBlobName);
+            if (!string.IsNullOrEmpty(project.ArtworkThumbnailBlobName))
+            {
+                await BlobStorageService.DeleteFileAsync(project.ArtworkThumbnailBlobName);
+            }
+
+            // Update project to remove artwork references
+            project.ArtworkBlobName = null;
+            project.ArtworkThumbnailBlobName = null;
+            project.UpdatedAt = DateTime.UtcNow;
+            await TableStorageService.UpdateProjectAsync(project);
+
+            // Send real-time notification
+            await NotificationService.NotifyProjectUpdated(project);
+
+            // Refresh data
+            await LoadProjectData();
+            
+            showArtworkModal = false;
+            StateHasChanged();
+            
+            // Schedule arb.js to be called after render
+            needsArbCall = true;
+        }
+        catch (Exception ex)
+        {
+            artworkError = $"Failed to remove artwork: {ex.Message}";
+        }
+        finally
+        {
+            isUploadingArtwork = false;
+        }
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

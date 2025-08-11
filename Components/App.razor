@@ -9,13 +9,17 @@
     <link rel="stylesheet" href="@Assets["ToiletGhost.styles.css"]" />
     <script src="arb.js"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="https://unpkg.com/@@microsoft/signalr@@latest/dist/browser/signalr.min.js"></script>
+    <script src="signalr-client.js"></script>
+    <meta name="robots" content="noindex, nofollow" />
+    <component type="typeof(Microsoft.AspNetCore.Components.Web.AntiforgeryToken)" render-mode="Static" />
     <ImportMap />
     <HeadOutlet />
 </head>
 
-<body>
-    <Routes />
-    <script src="_framework/blazor.web.js"></script>
+<body class="background-color-[#1a0d2e] color-[#ffffff] font-family-[system-ui,-apple-system,sans-serif] margin-[0] padding-[0]">
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.server.js"></script>
 </body>
 
 </html>

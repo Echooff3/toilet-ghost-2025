@@ -4,14 +4,16 @@ This is a web app where musicians can share works in progress for songs. Toilet 
 
 ## Work to be done
 
-As items get completed update this document and next to the feature put "- DONE". Summarize the work that was done underneath the feature. If I mention screenshots and I forget to paste one in please ask me for one.
+As items get completed update this document and next to the feature put "- DONE". Summarize the work that was done underneath the feature. If I mention screenshots and I forget to paste one in please ask me for one. If there are any typos in my documentation feel free to fix those too.
 
-### Project setup
-* Blazor web server
-  * Project started
-  * Add robots.txt and other headers to prevent the site from being crawled.
-* Azure Storage
-  * Add placeholders in #appsetting.json for the connection string and blob container.
+### Project setup - DONE
+* Blazor web server - DONE
+  * Project started - DONE
+  * Add robots.txt and other headers to prevent the site from being crawled. - DONE
+  * I have an azure app registration for this. I want all users to be authenticated right away. I don't want users to be able to register. I need to control access from the azure side. - DONE
+  * I plan on running this on Azure Web Apps. So feel free to use any feature from that to help make site development easier. - DONE
+* Azure Storage - DONE
+  * Add placeholders in appsettings.json for the connection string and blob container. - DONE
   * The container will be private. When a user requests a file you should use the presigned methods in the Blob client. You can set the lease for 24 hours. For project versions, allow the user to share this link with the lease on it. 
     * I'll add the proper values in my dotnet secrets.
   * I want to use azure blob storage for files.
@@ -245,3 +247,48 @@ You can combine as many utility classes as you want:
 - On all screens: `background-color: #222; color: white;`
 - On screens ≥768px: `padding: 2rem;`
 - On screens ≥1024px: `font-size: 2rem;`
+
+---
+
+## Implementation Summary
+
+### Completed Features ✅
+
+**Authentication & Security:**
+- Implemented Azure AD authentication with Microsoft.Identity.Web
+- All pages require authentication 
+- Added robots.txt to prevent crawling
+
+**Data Models:**
+- User model with email, nickname, timestamps
+- Project model with GUID ID, owner, name, artwork support
+- ProjectVersion model with file metadata and Unix timestamp versioning
+- Comment model supporting Text, Image, and Link types
+
+**Azure Integration:**
+- Blob storage service for file uploads with 75MB audio / 2MB image limits
+- Table storage service for all data persistence
+- File validation service with proper content type handling
+- Presigned URLs with 24-hour expiry for secure file sharing
+
+**UI Components:**
+- Main layout with header, sidebar navigation, and content area
+- User project tree with expandable folders showing version counts
+- Project view with WaveSurfer.js audio player
+- Modal dialogs for user settings and project creation
+- Upload functionality for new versions (owner only)
+- Comment system with text, image, and link support
+
+**Design:**
+- Purple color scheme (#8b5a96, #2d1b4e, #1a0d2e) optimized for readability
+- Mobile-first responsive design using arb.js utility classes
+- Emoji-driven UI with Windows file explorer feel
+- Flat material design aesthetic
+
+**File Management:**
+- Sanitized filename generation: "timestamp-user-project-version.ext"
+- Support for multiple audio formats (wav, mp3, m4a, aiff, ogg)
+- Image support for comments and artwork (png, jpg, gif)
+- Secure blob storage with SAS token URLs
+
+The application is now ready for deployment to Azure Web Apps! 🎵👻

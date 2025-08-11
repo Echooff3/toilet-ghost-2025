@@ -209,3 +209,60 @@ document.addEventListener('keyup', (event) => {
 });
 
 document.addEventListener('DOMContentLoaded', __arb);
+
+// WaveSurfer initialization function
+window.initializeWaveSurfer = (projectId, audioUrl) => {
+    import('https://unpkg.com/wavesurfer.js@7').then(({ default: WaveSurfer }) => {
+        const containerId = `waveform-${projectId}`;
+        const playBtnId = `play-btn-${projectId}`;
+        
+        const container = document.getElementById(containerId);
+        const playBtn = document.getElementById(playBtnId);
+        
+        if (!container || !playBtn) {
+            console.error('Container or play button not found');
+            return;
+        }
+
+        // Create WaveSurfer instance
+        const wavesurfer = WaveSurfer.create({
+            container: container,
+            waveColor: '#8b5a96',
+            progressColor: '#ffffff',
+            cursorColor: '#ffffff',
+            barWidth: 2,
+            barRadius: 3,
+            responsive: true,
+            height: 100,
+            normalize: true,
+            backend: 'WebAudio',
+            mediaControls: false,
+        });
+
+        // Load the audio
+        wavesurfer.load(audioUrl);
+
+        // Play/pause functionality
+        let isPlaying = false;
+        playBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                wavesurfer.pause();
+                playBtn.textContent = '▶️ Play';
+                isPlaying = false;
+            } else {
+                wavesurfer.play();
+                playBtn.textContent = '⏸️ Pause';
+                isPlaying = true;
+            }
+        });
+
+        // Update button when playback ends
+        wavesurfer.on('finish', () => {
+            playBtn.textContent = '▶️ Play';
+            isPlaying = false;
+        });
+
+        // Store reference for cleanup
+        window[`wavesurfer_${projectId}`] = wavesurfer;
+    });
+};

@@ -1,7 +1,234 @@
 ﻿@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
+@using ToiletGhost.Services
+@using ToiletGhost.Models
+@inject ITableStorageService TableStorageService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Toilet Ghost - Musical Hauntings</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="home-page">
+    <div class="hero-section text-align-[center] padding-[3rem_1rem] margin-bottom-[2rem]">
+        <div class="hero-icon font-size-[4rem] margin-bottom-[1rem]">👻</div>
+        <h1 class="hero-title font-size-[3rem] margin-bottom-[1rem] color-[#8b5a96] font-weight-[bold]">
+            Toilet Ghost
+        </h1>
+        <p class="hero-subtitle font-size-[1.2rem] color-[#cccccc] max-width-[600px] margin-[0_auto_2rem]">
+            Where musicians share their works in progress and let their creative spirits roam free! 🎵
+        </p>
+        
+        <AuthorizeView>
+            <Authorized>
+                <div class="welcome-message background-color-[#2d1b4e] border-radius-[8px] padding-[1.5rem] max-width-[500px] margin-[0_auto] border-[2px_solid_#8b5a96]">
+                    <p class="margin-[0] font-size-[1.1rem]">
+                        Welcome back, musical ghost! 🎭<br/>
+                        Ready to haunt some new tracks?
+                    </p>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="cta-section">
+                    <p class="margin-bottom-[1.5rem] color-[#cccccc]">
+                        Join the spectral symphony and start sharing your musical hauntings!
+                    </p>
+                    <a href="/MicrosoftIdentity/Account/SignIn" 
+                       class="btn-cta background-color-[#8b5a96] color-[#ffffff] text-decoration-[none] padding-[1rem_2rem] border-radius-[8px] font-size-[1.1rem] font-weight-[bold] display-[inline-block] transition-[background-color_0.3s]">
+                        🔐 Join the Haunt
+                    </a>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
 
-Welcome to your new app.
+    <!-- Recent Activity Section -->
+    <AuthorizeView>
+        <Authorized>
+            <div class="recent-activity">
+                <h2 class="section-title color-[#8b5a96] font-size-[2rem] margin-bottom-[1.5rem] text-align-[center]">
+                    👻 Recent Hauntings
+                </h2>
+                
+                @if (recentProjects.Any())
+                {
+                    <div class="projects-grid display-[grid] grid-template-columns-[repeat(auto-fill,minmax(300px,1fr))] gap-[1.5rem]">
+                        @foreach (var project in recentProjects.Take(6))
+                        {
+                            <div class="project-card background-color-[#2d1b4e] border-radius-[8px] padding-[1.5rem] border-[2px_solid_#8b5a96] transition-[transform_0.3s] cursor-[pointer] hover:transform-[translateY(-4px)]" 
+                                 @onclick="() => NavigateToProject(project.ProjectId)">
+                                <div class="project-header display-[flex] align-items-[center] gap-[0.5rem] margin-bottom-[1rem]">
+                                    <span class="project-icon font-size-[1.5rem]">🎵</span>
+                                    <h3 class="project-name margin-[0] color-[#ffffff] font-size-[1.2rem]">@project.Name</h3>
+                                </div>
+                                
+                                <div class="project-info color-[#cccccc] font-size-[0.9rem]">
+                                    <div class="owner margin-bottom-[0.5rem]">
+                                        👤 @(projectOwners.GetValueOrDefault(project.OwnerEmail, "Unknown Ghost"))
+                                    </div>
+                                    <div class="updated">
+                                        🕐 @GetRelativeTime(project.UpdatedAt)
+                                    </div>
+                                </div>
+                                
+                                @if (projectVersionCounts.ContainsKey(project.ProjectId))
+                                {
+                                    <div class="version-count margin-top-[1rem] color-[#8b5a96] font-weight-[bold]">
+                                        @projectVersionCounts[project.ProjectId] version@(projectVersionCounts[project.ProjectId] == 1 ? "" : "s")
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="no-projects text-align-[center] padding-[3rem] color-[#cccccc]">
+                        <div class="font-size-[3rem] margin-bottom-[1rem]">🕸️</div>
+                        <p class="font-size-[1.2rem] margin-bottom-[1rem]">No musical hauntings yet...</p>
+                        <p>Create your first project and start the spectral symphony!</p>
+                    </div>
+                }
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <div class="features-section">
+                <h2 class="section-title color-[#8b5a96] font-size-[2rem] margin-bottom-[2rem] text-align-[center]">
+                    ✨ Features for Musical Spirits
+                </h2>
+                
+                <div class="features-grid display-[grid] grid-template-columns-[repeat(auto-fit,minmax(280px,1fr))] gap-[2rem] max-width-[1000px] margin-[0_auto]">
+                    <div class="feature-card background-color-[#2d1b4e] border-radius-[8px] padding-[2rem] text-align-[center] border-[2px_solid_#8b5a96]">
+                        <div class="feature-icon font-size-[3rem] margin-bottom-[1rem]">🎵</div>
+                        <h3 class="feature-title color-[#8b5a96] margin-bottom-[1rem]">Share Works in Progress</h3>
+                        <p class="feature-description color-[#cccccc]">
+                            Upload your musical creations and get feedback from fellow ghosts in the community.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card background-color-[#2d1b4e] border-radius-[8px] padding-[2rem] text-align-[center] border-[2px_solid_#8b5a96]">
+                        <div class="feature-icon font-size-[3rem] margin-bottom-[1rem]">💬</div>
+                        <h3 class="feature-title color-[#8b5a96] margin-bottom-[1rem]">Collaborative Feedback</h3>
+                        <p class="feature-description color-[#cccccc]">
+                            Comment, share images, and add links to help each other perfect your haunting melodies.
+                        </p>
+                    </div>
+                    
+                    <div class="feature-card background-color-[#2d1b4e] border-radius-[8px] padding-[2rem] text-align-[center] border-[2px_solid_#8b5a96]">
+                        <div class="feature-icon font-size-[3rem] margin-bottom-[1rem]">🔗</div>
+                        <h3 class="feature-title color-[#8b5a96] margin-bottom-[1rem]">Easy Sharing</h3>
+                        <p class="feature-description color-[#cccccc]">
+                            Generate shareable links for your tracks that last 24 hours - perfect for temporary hauntings!
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    private List<Project> recentProjects = new();
+    private Dictionary<string, string> projectOwners = new();
+    private Dictionary<string, int> projectVersionCounts = new();
+
+    // Flag to track when arb.js needs to be called after render
+    private bool needsArbCall = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRecentProjects();
+        await SetupGlobalSignalR();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await SetupGlobalSignalR();
+        }
+        
+        // Run arb.js whenever needed (first render or after state changes)
+        if (firstRender || needsArbCall)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval", "if (window.__arb) window.__arb();");
+                needsArbCall = false; // Reset the flag
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to call arb.js in home: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task SetupGlobalSignalR()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("setupGlobalSignalR", DotNetObjectReference.Create(this));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to setup global SignalR: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnProjectListUpdated()
+    {
+        Console.WriteLine("Project list updated via SignalR");
+        await LoadRecentProjects();
+        await InvokeAsync(StateHasChanged);
+        
+        // Schedule arb.js to be called after render
+        needsArbCall = true;
+    }
+
+    private async Task LoadRecentProjects()
+    {
+        try
+        {
+            // Get all projects sorted by update time
+            recentProjects = (await TableStorageService.GetAllProjectsAsync()).ToList();
+            
+            // Load owner nicknames
+            var ownerEmails = recentProjects.Select(p => p.OwnerEmail).Distinct();
+            foreach (var email in ownerEmails)
+            {
+                var user = await TableStorageService.GetUserAsync(email);
+                projectOwners[email] = user?.Nickname ?? "Unknown Ghost";
+            }
+            
+            // Load version counts
+            foreach (var project in recentProjects)
+            {
+                var versions = await TableStorageService.GetProjectVersionsAsync(project.ProjectId);
+                projectVersionCounts[project.ProjectId] = versions.Count();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading recent projects: {ex.Message}");
+        }
+    }
+
+    private void NavigateToProject(string projectId)
+    {
+        Navigation.NavigateTo($"/project/{projectId}");
+    }
+
+    private static string GetRelativeTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime;
+        
+        if (timeSpan.TotalDays >= 1)
+            return $"{(int)timeSpan.TotalDays} day{((int)timeSpan.TotalDays == 1 ? "" : "s")} ago";
+        if (timeSpan.TotalHours >= 1)
+            return $"{(int)timeSpan.TotalHours} hour{((int)timeSpan.TotalHours == 1 ? "" : "s")} ago";
+        if (timeSpan.TotalMinutes >= 1)
+            return $"{(int)timeSpan.TotalMinutes} minute{((int)timeSpan.TotalMinutes == 1 ? "" : "s")} ago";
+        
+        return "Just now";
+    }
+}

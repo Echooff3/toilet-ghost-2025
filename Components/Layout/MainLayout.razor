@@ -1,9 +1,315 @@
-﻿@inherits LayoutComponentBase
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using ToiletGhost.Services
+@using ToiletGhost.Models
+@inherits LayoutComponentBase
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITableStorageService TableStorageService
+@inject INotificationService NotificationService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 
-@Body
+<CascadingAuthenticationState>
+    <div class="app-container display-[flex] height-[100vh] background-color-[#1a0d2e]">
+        <!-- Header -->
+        <div class="header position-[fixed] top-[0] left-[0] right-[0] height-[60px] background-color-[#2d1b4e] border-bottom-[2px_solid_#8b5a96] z-index-[1000] display-[flex] align-items-[center] justify-content-[space-between] padding-[0_1rem]">
+            <!-- Site Icon -->
+            <div class="site-icon font-size-[1.5rem] font-weight-[bold] color-[#ffffff] cursor-[pointer]" @onclick="NavigateHome">
+                👻 Toilet Ghost
+            </div>
+
+            <!-- User Section -->
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user-section display-[flex] align-items-[center] gap-[1rem]">
+                        <!-- Styled New Project button -->
+                        <button type="button" style="background-color: #8b5a96; color: #ffffff; border: 2px solid #ffffff; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: bold; transition: all 0.2s ease;" 
+                                onmouseover="this.style.backgroundColor='#a568b3'; this.style.transform='translateY(-1px)'"
+                                onmouseout="this.style.backgroundColor='#8b5a96'; this.style.transform='translateY(0)'"
+                                @onclick="ShowCreateProjectModal">
+                            ➕ New Project
+                        </button>
+                        
+                        <!-- User nickname display -->
+                        <div class="user-info display-[flex] align-items-[center] gap-[0.5rem] cursor-[pointer]" @onclick="ShowUserModal">
+                            <span class="user-emoji">👤</span>
+                            <span class="user-nickname">@currentUser?.Nickname</span>
+                        </div>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="login-section">
+                        <a href="/MicrosoftIdentity/Account/SignIn" class="btn-login background-color-[#8b5a96] color-[#ffffff] border-[none] padding-[0.5rem_1rem] border-radius-[4px] text-decoration-[none] font-size-[0.9rem]">
+                            🔐 Sign In
+                        </a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content margin-top-[60px] display-[flex] width-[100%] height-[calc(100vh-60px)]">
+            <!-- Sidebar -->
+            <div class="sidebar width-[300px] background-color-[#241640] border-right-[2px_solid_#8b5a96] overflow-y-[auto] padding-[1rem]">
+                <AuthorizeView>
+                    <Authorized>
+                        <UserProjectTree />
+                    </Authorized>
+                    <NotAuthorized>
+                        <div class="empty-state text-align-[center] padding-[2rem] color-[#cccccc]">
+                            <div class="font-size-[2rem] margin-bottom-[1rem]">👻</div>
+                            <p>Sign in to start sharing your musical hauntings!</p>
+                        </div>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
+
+            <!-- Content Area -->
+            <div class="content-area flex-[1] overflow-y-[auto] padding-[1rem]">
+                @Body
+            </div>
+        </div>
+    </div>
+
+    <!-- User Modal -->
+    @if (showUserModal)
+    {
+        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;" @onclick="HideUserModal">
+            <div style="background-color: #2d1b4e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; color: #ffffff; border: 2px solid #8b5a96; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);" @onclick:stopPropagation="true">
+                <h3 style="margin-top: 0; color: #8b5a96; font-size: 1.5rem; text-align: center; margin-bottom: 1.5rem;">👤 User Settings</h3>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ffffff;">Nickname:</label>
+                    <input type="text" @bind="editNickname" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 6px; background-color: #1a0d2e; color: #ffffff; font-size: 1rem; box-sizing: border-box;" />
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button style="background-color: #666666; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                            onmouseover="this.style.backgroundColor='#777777'"
+                            onmouseout="this.style.backgroundColor='#666666'"
+                            @onclick="HideUserModal">
+                        Cancel
+                    </button>
+                    <button style="background-color: #8b5a96; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                            onmouseover="this.style.backgroundColor='#a568b3'"
+                            onmouseout="this.style.backgroundColor='#8b5a96'"
+                            @onclick="SaveNickname">
+                        💾 Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Create Project Modal -->
+    @if (showCreateProjectModal)
+    {
+        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; align-items: center; justify-content: center;" @onclick="HideCreateProjectModal">
+            <div style="background-color: #2d1b4e; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; color: #ffffff; border: 2px solid #8b5a96; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);" @onclick:stopPropagation="true">
+                <h3 style="margin-top: 0; color: #8b5a96; font-size: 1.5rem; text-align: center; margin-bottom: 1.5rem;">🎵 Create New Project</h3>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #ffffff;">Project Name:</label>
+                    <input type="text" @bind="newProjectName" style="width: 100%; padding: 0.75rem; border: 2px solid #8b5a96; border-radius: 6px; background-color: #1a0d2e; color: #ffffff; font-size: 1rem; box-sizing: border-box;" placeholder="Enter project name..." />
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button style="background-color: #666666; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                            onmouseover="this.style.backgroundColor='#777777'"
+                            onmouseout="this.style.backgroundColor='#666666'"
+                            @onclick="HideCreateProjectModal">
+                        Cancel
+                    </button>
+                    <button style="background-color: #8b5a96; color: #ffffff; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; font-size: 1rem;" 
+                            onmouseover="this.style.backgroundColor='#a568b3'"
+                            onmouseout="this.style.backgroundColor='#8b5a96'"
+                            @onclick="CreateProject" disabled="@string.IsNullOrWhiteSpace(newProjectName)">
+                        ✨ Create
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</CascadingAuthenticationState>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private Models.User? currentUser;
+    private bool showUserModal = false;
+    private bool showCreateProjectModal = false;
+    private string editNickname = "";
+    private string newProjectName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine("MainLayout OnInitializedAsync called");
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        Console.WriteLine($"User authenticated: {authState.User.Identity?.IsAuthenticated}");
+        
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            var email = authState.User.FindFirst(ClaimTypes.Email)?.Value ?? 
+                       authState.User.FindFirst("preferred_username")?.Value ?? "";
+            
+            Console.WriteLine($"User email from claims: '{email}'");
+            
+            if (!string.IsNullOrEmpty(email))
+            {
+                Console.WriteLine($"Getting user from database for email: {email}");
+                currentUser = await TableStorageService.GetUserAsync(email);
+                
+                if (currentUser == null)
+                {
+                    Console.WriteLine("User not found in database, creating new user");
+                    currentUser = new Models.User(email);
+                    await TableStorageService.CreateOrUpdateUserAsync(currentUser);
+                    Console.WriteLine($"Created new user: {currentUser.Email}, Nickname: {currentUser.Nickname}");
+                }
+                else
+                {
+                    Console.WriteLine($"Found existing user: {currentUser.Email}, Nickname: {currentUser.Nickname}");
+                }
+            }
+        }
+        else
+        {
+            Console.WriteLine("User is not authenticated");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Console.WriteLine("OnAfterRenderAsync - First render completed");
+            Console.WriteLine($"showCreateProjectModal: {showCreateProjectModal}");
+            Console.WriteLine($"currentUser: {currentUser?.Email}");
+            
+            // Check if SignalR is connected
+            await JSRuntime.InvokeVoidAsync("console.log", "Checking Blazor Server connection...");
+            
+            try
+            {
+                // This should work if SignalR is properly connected
+                await JSRuntime.InvokeVoidAsync("console.log", "JavaScript interop is working - SignalR should be connected");
+                
+                // Join user group for notifications if user is authenticated
+                if (currentUser != null && !string.IsNullOrEmpty(currentUser.Email))
+                {
+                    await JSRuntime.InvokeVoidAsync("joinUserGroup", currentUser.Email);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"JavaScript interop failed: {ex.Message}");
+            }
+        }
+    }
+
+    private void NavigateHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    private void ShowUserModal()
+    {
+        editNickname = currentUser?.Nickname ?? "";
+        showUserModal = true;
+    }
+
+    private void HideUserModal()
+    {
+        showUserModal = false;
+    }
+
+    private async Task SaveNickname()
+    {
+        if (currentUser != null && !string.IsNullOrWhiteSpace(editNickname))
+        {
+            currentUser.Nickname = editNickname.Trim();
+            await TableStorageService.CreateOrUpdateUserAsync(currentUser);
+            showUserModal = false;
+            StateHasChanged();
+            
+            // Schedule arb.js to be called after render
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval", "if (window.__arb) window.__arb();");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to call arb.js in main layout: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task TestButtonClick()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Test button clicked! This confirms button clicks are working.");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("statically rendered"))
+        {
+            Console.WriteLine("Test button clicked but skipping alert during prerendering");
+        }
+    }
+
+    private void ShowCreateProjectModal()
+    {
+        newProjectName = "";
+        showCreateProjectModal = true;
+    }
+
+    private void HideCreateProjectModal()
+    {
+        showCreateProjectModal = false;
+    }
+
+    private async Task CreateProject()
+    {
+        if (currentUser != null && !string.IsNullOrWhiteSpace(newProjectName))
+        {
+            try
+            {
+                Console.WriteLine($"Creating project '{newProjectName}' for user '{currentUser.Email}'");
+                var project = new Models.Project(currentUser.Email, newProjectName.Trim());
+                Console.WriteLine($"Project created with ID: {project.ProjectId}");
+                
+                await TableStorageService.CreateProjectAsync(project);
+                Console.WriteLine("Project saved to database");
+                
+                // Send real-time notification
+                await NotificationService.NotifyProjectCreated(project);
+                
+                showCreateProjectModal = false;
+                newProjectName = "";
+                
+                // Navigate to the new project
+                Console.WriteLine($"Navigating to /project/{project.ProjectId}");
+                Navigation.NavigateTo($"/project/{project.ProjectId}");
+            }
+            catch (Exception ex)
+            {
+                // Log error and show user-friendly message
+                Console.WriteLine($"Error creating project: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                
+                // Show error to user (only if not prerendering)
+                try
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Failed to create project: {ex.Message}");
+                }
+                catch (InvalidOperationException jsEx) when (jsEx.Message.Contains("statically rendered"))
+                {
+                    Console.WriteLine("Skipping alert during prerendering");
+                }
+            }
+        }
+        else
+        {
+            Console.WriteLine($"Cannot create project - User: {currentUser?.Email}, Project name: '{newProjectName}'");
+        }
+    }
+}

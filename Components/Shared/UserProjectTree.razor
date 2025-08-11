@@ -1,0 +1,191 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using ToiletGhost.Services
+@using ToiletGhost.Models
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITableStorageService TableStorageService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<div class="project-tree">
+    @if (users.Any())
+    {
+        @foreach (var user in users)
+        {
+            <div class="user-item margin-bottom-[1rem]">
+                <div class="user-header display-[flex] align-items-[center] gap-[0.5rem] cursor-[pointer] padding-[0.5rem] border-radius-[4px] hover:background-color-[#3a2a5c]" 
+                     @onclick="() => ToggleUser(user.Email)">
+                    <span class="expand-icon">@(expandedUsers.Contains(user.Email) ? "📂" : "📁")</span>
+                    <span class="user-name font-weight-[bold] color-[#8b5a96]">@user.Nickname</span>
+                </div>
+
+                @if (expandedUsers.Contains(user.Email))
+                {
+                    <div class="user-projects margin-left-[1.5rem]">
+                        @if (userProjects.ContainsKey(user.Email) && userProjects[user.Email].Any())
+                        {
+                            @foreach (var project in userProjects[user.Email])
+                            {
+                                var versionCount = projectVersionCounts.GetValueOrDefault(project.ProjectId, 0);
+                                <div class="project-item display-[flex] align-items-[center] gap-[0.5rem] cursor-[pointer] padding-[0.25rem_0.5rem] border-radius-[4px] hover:background-color-[#3a2a5c] margin-bottom-[0.25rem]"
+                                     @onclick="() => SelectProject(project)">
+                                    <span class="project-icon">🎵</span>
+                                    <span class="project-name">@project.Name</span>
+                                    <span class="version-count color-[#cccccc] font-size-[0.8rem]">(@versionCount)</span>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty-projects color-[#888888] font-style-[italic] padding-[0.5rem]">
+                                No projects yet 👻
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <div class="loading text-align-[center] color-[#cccccc] padding-[2rem]">
+            <div class="font-size-[1.5rem] margin-bottom-[0.5rem]">👻</div>
+            <div>Loading haunted projects...</div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<User> users = new();
+    private Dictionary<string, List<Project>> userProjects = new();
+    private Dictionary<string, int> projectVersionCounts = new();
+    private HashSet<string> expandedUsers = new();
+    private string? currentUserEmail;
+
+    // Flag to track when arb.js needs to be called after render
+    private bool needsArbCall = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await SetupSignalRConnection();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await SetupSignalRConnection();
+        }
+        
+        // Run arb.js whenever needed (first render or after state changes)
+        if (firstRender || needsArbCall)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval", "if (window.__arb) window.__arb();");
+                needsArbCall = false; // Reset the flag
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to call arb.js in tree: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task SetupSignalRConnection()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("setupTreeSignalR", DotNetObjectReference.Create(this));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to setup tree SignalR: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnProjectListUpdated()
+    {
+        Console.WriteLine("Project tree updated via SignalR");
+        await LoadData();
+        await InvokeAsync(StateHasChanged);
+        
+        // Schedule arb.js to be called after render
+        needsArbCall = true;
+    }
+
+    [JSInvokable]
+    public async Task OnProjectUpdated(object projectData)
+    {
+        Console.WriteLine("Individual project updated via SignalR");
+        await LoadData();
+        await InvokeAsync(StateHasChanged);
+        
+        // Schedule arb.js to be called after render
+        needsArbCall = true;
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            // Get current user
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                currentUserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value ?? 
+                                 authState.User.FindFirst("preferred_username")?.Value ?? "";
+            }
+
+            // Load all users
+            users = (await TableStorageService.GetAllUsersAsync()).ToList();
+            
+            // Load projects for each user
+            userProjects.Clear();
+            projectVersionCounts.Clear();
+            
+            foreach (var user in users)
+            {
+                var projects = (await TableStorageService.GetUserProjectsAsync(user.Email)).ToList();
+                userProjects[user.Email] = projects;
+                
+                // Auto-expand current user
+                if (user.Email == currentUserEmail)
+                {
+                    expandedUsers.Add(user.Email);
+                }
+                
+                // Load version counts for each project
+                foreach (var project in projects)
+                {
+                    var versions = await TableStorageService.GetProjectVersionsAsync(project.ProjectId);
+                    projectVersionCounts[project.ProjectId] = versions.Count();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Handle error - maybe show a toast or log
+            Console.WriteLine($"Error loading data: {ex.Message}");
+        }
+    }
+
+    private void ToggleUser(string userEmail)
+    {
+        if (expandedUsers.Contains(userEmail))
+        {
+            expandedUsers.Remove(userEmail);
+        }
+        else
+        {
+            expandedUsers.Add(userEmail);
+        }
+    }
+
+    private void SelectProject(Project project)
+    {
+        Navigation.NavigateTo($"/project/{project.ProjectId}");
+    }
+}
